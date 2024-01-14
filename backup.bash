@@ -12,54 +12,66 @@ if [[ -t 1 ]]; then
 fi
 
 if [[ -z ${BUCKET_PATH} ]]; then
-  printf "Please set the env variable ${RED}BUCKET${NC} to the s3 bucket name."
-  printf "E.g. BUCKET_PATH=my-bucket/breath-of-the-wild/jonathan\n"
-  exit 0
+  printf "Please set the env variable ${RED}BUCKET_PATH${NC} to the s3 bucket name.\n"
+  printf "E.g. BUCKET_PATH=ryujinx-00\n"
+  exit 1
 fi
 
 if [[ -z ${ARCHIVE_LIMIT} ]]; then
-  printf "Please set the env variable ${RED}ARCHIVE_LIMIT${NC} to limit the number of archives to keep."
+  printf "Please set the env variable ${RED}ARCHIVE_LIMIT${NC} to limit the number of archives to keep.\n"
   printf "E.g. ARCHIVE_LIMIT=10\n"
-  exit 0
+  exit 1
 fi
 
-if [[ -z $1 ]]; then
-  printf "Please pass one positional argument containing the absolute path to the game user data."
-  printf "E.g. ~/Documents/Cemu/mlc/usr/save/00050000/101c9400/user/\n"
+if [[ $# -eq 0 ]]; then
+  printf "Please pass one or more positional arguments containing the absolute paths to the game user data.\n"
+  printf "E.g. ~/Library/Application Support/Ryujinx/bis/user/\n"
+  exit 1
 fi
 
 bucket_path=${BUCKET_PATH}
 archive_limit=${ARCHIVE_LIMIT}
-path_to_game_user_dir=$1
+temp_dir=$(mktemp -d)
 
-printf "Navigating ${RED}${path_to_game_user_dir}${NC}\n"
-pushd $path_to_game_user_dir
-
-function navigate_back {
-  popd
+function cleanup {
+  printf "Cleaning up temporary files.\n"
+  rm -rf "$temp_dir"
 }
-trap navigate_back EXIT
+trap cleanup EXIT
 
-printf "Creating archive of ${RED}${path_to_game_user_dir}${NC}\n"
 archive_name="game-data-$(date +"%Y-%m-%d-%H-%M-%S").zip"
-zip -r $archive_name .
+
+# Copy all directories to a temporary directory and create a single archive
+for dir in "$@"; do
+  if [[ -d $dir ]]; then
+    printf "Copying ${RED}${dir}${NC} to temporary directory.\n"
+    dir_basename=$(basename "$dir")
+    cp -a "$dir" "$temp_dir/$dir_basename"
+  else
+    printf "${RED}Warning:${NC} Directory ${RED}${dir}${NC} does not exist. Skipping.\n"
+  fi
+done
+
+printf "Creating archive of the directories.\n"
+pushd "$temp_dir" > /dev/null
+zip -r "$archive_name" .
+popd > /dev/null
 
 printf "Checking if the s3 bucket has more than ${RED}${archive_limit}${NC} files already.\n"
-content=( $(aws s3 ls s3://$bucket_path/ | awk '{print $4}') )
+content=( $(aws s3 ls "s3://${bucket_path}/" | awk '{print $4}') )
 
-if [[ ${#content[@]} -eq $archive_limit || ${#content[@]} -gt $archive_limit  ]]; then
+if [[ ${#content[@]} -ge $archive_limit ]]; then
   echo "There are too many archives. Deleting oldest one."
-  # We can assume here that the list is in cronological order.
-  printf "${RED}s3://${bucket_path}/${content[0]}\n"
-  aws s3 rm s3://$bucket_path/${content[0]}
+  oldest_archive=${content[0]}
+  printf "${RED}s3://${bucket_path}/${oldest_archive}${NC}\n"
+  aws s3 rm "s3://${bucket_path}/${oldest_archive}"
 fi
 
 printf "Uploading ${RED}${archive_name}${NC} to the s3 bucket.\n"
-state=$(aws s3 cp $archive_name s3://$bucket_path/)
+state=$(aws s3 cp "$temp_dir/$archive_name" "s3://${bucket_path}/")
 
 if [[ "$state" =~ "upload:" ]]; then
   printf "Backup ${LIGHT_GREEN}successful${NC}.\n"
-  rm $archive_name
 else
-  printf "${RED}Error${NC} occured while uploading archive. Please investigate.\n"
+  printf "${RED}Error${NC} occurred while uploading archive. Please investigate.\n"
 fi

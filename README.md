@@ -1,8 +1,8 @@
-# Cemu Scripts
+# Ryujinx Scripts
 
-Scripts for doing things like backing up and restoring Cemu game data to and from my S3 bucket. Lots of things are hardcoded in these scripts, as it's simpler that way for now.
+Scripts for doing things like backing up and restoring RyuJinx game data to and from my S3 bucket. Lots of things are hardcoded in these scripts, as it's simpler that way for now.
 
-Credit for these scripts goes to [this blogpost](https://skarlso.github.io/2016/04/16/minecraft-server-aws-s3-backup/), which offers a script to backup minecraft server world data to an s3 bucket.
+Credit for these scripts goes to [this blogpost](https://skarlso.github.io/2016/04/16/minecraft-server-aws-s3-backup/), which offers a script to backup minecraft server world data to an s3 bucket. And to [this reddit post](https://www.reddit.com/r/Ryujinx/comments/1246bdo/syncing_save_files_across_computers/) that describe which directories should be backed up.
 
 ## Depedencies
 
@@ -15,12 +15,14 @@ Credit for these scripts goes to [this blogpost](https://skarlso.github.io/2016/
 
 ## Installation
 
-1. Create an S3 bucket. Mine is called `jonathan-mohrbacher-cemu-01`.
+1. Create an S3 bucket. Mine is called `ryujinx-00`.
+   * It is blocked from public access and has no permissions. But I have a `backup-bucket-user` which has explicit permissions to use this bucket.
 1. Initialize the environment variable file.
    ```bash
    cp .envrc.sample .envrc
    ```
 1. Setup AWS credentials. Follow [this guide](https://docs.aws.amazon.com/AmazonS3/latest/userguide/example-walkthroughs-managing-access-example1.html) to create a user dedicated to using AWS CLI to interact with this bucket.
+   * Depart from the guide in one way: also give the user permission to do `s3:DeleteObject`.
    * Set the user's credentials in the `.envrc` file.
      ```bash
      export AWS_ACCESS_KEY_ID=...
@@ -35,5 +37,5 @@ Credit for these scripts goes to [this blogpost](https://skarlso.github.io/2016/
    ```
 1. Invoke commands, for example ...
    ```bash
-   restoreLiviaZelda game-data-2023-01-08-14-45-30.zip
+   backup
    ```
